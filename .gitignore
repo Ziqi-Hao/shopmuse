@@ -1,0 +1,15 @@
+node_modules/
+.next/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+*.egg-info/
+dist/
+build/
+.DS_Store
+*.faiss
+*.pkl
+backend/data/index/
+reference-git/
