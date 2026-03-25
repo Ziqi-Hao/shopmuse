@@ -9,15 +9,12 @@ Memory Architecture:
 
 import base64
 import json
-import io
-from PIL import Image
 from openai import OpenAI
 
 from app.models.schemas import ChatRequest, ChatResponse, Product
 from app.tools.catalog_tools import (
     TOOL_SCHEMAS,
     catalog_text_search,
-    catalog_image_search,
     get_product_by_id,
 )
 from app.memory import (
@@ -110,11 +107,35 @@ class ShopMuseAgent:
         return prompt
 
     async def _handle_image_search(self, request: ChatRequest, session_id: str, user_id: str) -> ChatResponse:
-        image_data = base64.b64decode(request.image_base64)
-        image = Image.open(io.BytesIO(image_data)).convert("RGB")
+        # Step 1: Use LLM vision to describe the image
+        describe_messages = [
+            {"role": "system", "content": "You are a fashion product analyst. Describe the item in the image concisely: type (shirt, shoes, bag, etc.), color, style, material, and any distinctive features. Output only the description, no preamble."},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{request.image_base64}"},
+                    },
+                    {
+                        "type": "text",
+                        "text": request.message or "Describe this product image for searching similar items.",
+                    },
+                ],
+            },
+        ]
 
-        products = catalog_image_search(image, top_k=5)
+        description_response = self.client.chat.completions.create(
+            model=self.model,
+            messages=describe_messages,
+            max_tokens=150,
+        )
+        image_description = description_response.choices[0].message.content
 
+        # Step 2: Use the description to search catalog via text embeddings
+        products = catalog_text_search(query=image_description, top_k=5)
+
+        # Step 3: Generate explanation with the image + search results
         product_descriptions = "\n".join(
             f"- {p.title} ({p.id}): {p.description} [${p.price}]"
             for p in products
@@ -122,7 +143,7 @@ class ShopMuseAgent:
 
         system_prompt = self._build_system_prompt(session_id, user_id, "image search")
 
-        messages = [
+        explain_messages = [
             {"role": "system", "content": system_prompt},
             {
                 "role": "user",
@@ -134,9 +155,10 @@ class ShopMuseAgent:
                     {
                         "type": "text",
                         "text": f"The user uploaded this image to find similar products. "
-                        f"Here are the matching products from our catalog:\n{product_descriptions}\n\n"
+                        f"I analyzed the image as: {image_description}\n\n"
+                        f"Here are matching products from our catalog:\n{product_descriptions}\n\n"
                         f"User message: {request.message or 'Find products similar to this image'}\n\n"
-                        f"Explain how these products relate to the uploaded image. Be specific about visual similarities (color, style, type).",
+                        f"Explain how these products relate to the uploaded image. Be specific about visual similarities.",
                     },
                 ],
             },
@@ -144,7 +166,7 @@ class ShopMuseAgent:
 
         response = self.client.chat.completions.create(
             model=self.model,
-            messages=messages,
+            messages=explain_messages,
             max_tokens=500,
         )
 

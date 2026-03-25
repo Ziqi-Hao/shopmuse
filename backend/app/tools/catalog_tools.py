@@ -4,10 +4,9 @@ These are called by the LLM agent via function calling.
 """
 
 import json
-from app.vector_store import search_by_text, search_by_image
+from app.vector_store import search_by_text
 from app.catalog import get_catalog
 from app.models.schemas import Product
-from PIL import Image
 
 
 def catalog_text_search(query: str, category: str = None, max_price: float = None,
@@ -30,11 +29,6 @@ def catalog_text_search(query: str, category: str = None, max_price: float = Non
         filters["use_case"] = use_case
 
     return search_by_text(query, top_k=top_k, filters=filters if filters else None)
-
-
-def catalog_image_search(image: Image.Image, top_k: int = 5) -> list[Product]:
-    """Search the product catalog using an uploaded image to find visually similar products."""
-    return search_by_image(image, top_k=top_k)
 
 
 def get_product_by_id(product_id: str) -> Product | None:
