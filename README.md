@@ -197,27 +197,13 @@ Open http://localhost:3000
 
 ## Deployment
 
-Frontend on **Vercel**, backend on **Render**.
-
-### Backend (Render)
-
-1. Connect GitHub repo on [Render](https://render.com) → New Web Service
-2. Root Directory: `backend`
-3. Build Command: `pip install -r requirements.txt`
-4. Start Command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-5. Environment variables: `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LLM_MODEL`, `FRONTEND_URL`
-
-### Frontend (Vercel)
-
-1. Import repo on [Vercel](https://vercel.com)
-2. Root Directory: `frontend`
-3. Environment variable: `NEXT_PUBLIC_API_URL` = your Render backend URL
+Frontend on **Vercel**, backend on **Render**. See `.env.example` files for required environment variables.
 
 ## API Reference
 
-### `POST /chat`
+The backend auto-generates interactive API docs at `/docs` (Swagger UI).
 
-Main agent endpoint. Accepts text, images, and session context.
+### `POST /chat` — Main Agent Endpoint
 
 ```json
 // Request
@@ -230,30 +216,18 @@ Main agent endpoint. Accepts text, images, and session context.
 // Response
 {
   "message": "I found some great waterproof hiking boots...",
-  "products": [
-    {
-      "id": "SH041",
-      "title": "Sand Trail Hiking Boots",
-      "price": 126.99,
-      "rating": 4.7,
-      "review_count": 1179,
-      "discount_pct": 25,
-      "in_stock": true
-    }
-  ],
+  "products": [{"id": "SH041", "title": "Sand Trail Hiking Boots", "price": 126.99, ...}],
   "intent": "text_recommendation"
 }
 ```
 
-### Other Endpoints
-
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/health` | GET | Server status + index stats + cache metrics |
-| `/products` | GET | List products (filters: `category`, `style`, `max_price`) |
-| `/products/{id}` | GET | Single product by ID |
-| `/categories` | GET | List all categories |
-| `/memory/{user_id}` | GET | Debug: view stored memories for a user |
+| `POST /chat` | POST | Agent conversation (text, image, or both) |
+| `GET /products` | GET | List/filter products (`category`, `style`, `max_price`) |
+| `GET /products/{id}` | GET | Single product by ID |
+| `GET /categories` | GET | List all categories |
+| `GET /health` | GET | Server status, index stats, cache metrics |
 
 ## Limitations
 
