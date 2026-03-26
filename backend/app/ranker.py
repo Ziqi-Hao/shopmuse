@@ -11,7 +11,7 @@ Reference: twitter/the-algorithm (product-mixer, home-mixer, cr-mixer)
 """
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from app.models.schemas import Product
 
 
@@ -19,38 +19,46 @@ from app.models.schemas import Product
 class ScoredCandidate:
     """A product candidate with scoring signals attached."""
     product: Product
-    # Base similarity score from vector search (0-1)
     similarity_score: float = 0.0
-    # Individual signal scores
     freshness_score: float = 1.0
     popularity_score: float = 1.0
     diversity_bonus: float = 1.0
     price_relevance: float = 1.0
-    # Final blended score
+    stock_penalty: float = 1.0
+    discount_boost: float = 1.0
+    review_confidence: float = 1.0
     final_score: float = 0.0
 
 
 # ──────────────────────────────────────────────────────────
 # Stage 1: Heuristic Rescorers (multiplicative factors)
 # Pattern from: home-mixer/HeuristicScorer.scala
-# Each rescorer applies a factor to adjust the base score.
 # ──────────────────────────────────────────────────────────
 
 def freshness_rescorer(candidate: ScoredCandidate) -> float:
-    """Boost newer/seasonal products. In production, this would use product creation date."""
-    # Simulate freshness based on rating (higher-rated items are treated as "fresher")
-    # In production: use actual timestamps
-    if candidate.product.rating >= 4.7:
-        return 1.15  # Top-rated items get a boost
-    elif candidate.product.rating >= 4.5:
-        return 1.05
-    return 1.0
+    """Boost top-rated products (proxy for freshness/quality)."""
+    r = candidate.product.rating
+    if r >= 4.7:
+        return 1.15
+    elif r >= 4.5:
+        return 1.08
+    elif r >= 4.0:
+        return 1.0
+    return 0.9  # Low-rated items get penalized
 
 
 def popularity_rescorer(candidate: ScoredCandidate) -> float:
-    """Adjust based on popularity signals (rating as proxy)."""
-    # Normalize rating to a boost factor: 4.0 -> 0.95x, 5.0 -> 1.1x
-    return 0.8 + (candidate.product.rating / 5.0) * 0.3
+    """Score based on review count (social proof signal)."""
+    rc = candidate.product.review_count
+    if rc >= 1000:
+        return 1.2  # Bestseller boost
+    elif rc >= 500:
+        return 1.1
+    elif rc >= 100:
+        return 1.0
+    elif rc >= 20:
+        return 0.95
+    return 0.85  # Very few reviews, less confidence
 
 
 def price_relevance_rescorer(candidate: ScoredCandidate, target_price: float | None = None) -> float:
@@ -59,32 +67,61 @@ def price_relevance_rescorer(candidate: ScoredCandidate, target_price: float | N
         return 1.0
     price = candidate.product.price
     ratio = min(price, target_price) / max(price, target_price)
-    return 0.5 + 0.5 * ratio  # 0.5 to 1.0 range
+    return 0.5 + 0.5 * ratio
+
+
+def stock_rescorer(candidate: ScoredCandidate) -> float:
+    """Heavily penalize out-of-stock items (show but rank lower)."""
+    if not candidate.product.in_stock:
+        return 0.2  # Strong penalty but don't completely hide
+    return 1.0
+
+
+def discount_rescorer(candidate: ScoredCandidate) -> float:
+    """Slightly boost items on sale (engagement signal)."""
+    d = candidate.product.discount_pct
+    if d >= 25:
+        return 1.12
+    elif d >= 15:
+        return 1.06
+    elif d > 0:
+        return 1.03
+    return 1.0
+
+
+def review_confidence_rescorer(candidate: ScoredCandidate) -> float:
+    """
+    Bayesian-style confidence: a 4.8 with 5 reviews is less reliable
+    than a 4.5 with 500 reviews. Blend rating with review volume.
+    """
+    r = candidate.product.rating
+    n = candidate.product.review_count
+    # Wilson-like: weighted average with prior of 4.0
+    prior = 4.0
+    weight = min(n / 50.0, 1.0)  # Full confidence at 50+ reviews
+    adjusted = weight * r + (1 - weight) * prior
+    return 0.8 + (adjusted / 5.0) * 0.25  # 0.8 to 1.05 range
 
 
 def diversity_rescorer(candidate: ScoredCandidate, seen_categories: dict[str, int]) -> float:
-    """
-    Penalize over-representation of a single category.
-    Pattern from: Twitter's author diversity penalty.
-    """
+    """Penalize over-representation of a single category."""
     cat = candidate.product.category
     count = seen_categories.get(cat, 0)
     if count == 0:
-        return 1.1  # Bonus for introducing a new category
+        return 1.1
     elif count >= 3:
-        return 0.7  # Strong penalty for 4th+ item from same category
+        return 0.7
     elif count >= 2:
-        return 0.85  # Mild penalty for 3rd item
+        return 0.85
     return 1.0
 
 
 # ──────────────────────────────────────────────────────────
 # Stage 2: Filtering
-# Pattern from: product-mixer Filter + Selector
 # ──────────────────────────────────────────────────────────
 
 def pre_rank_filter(candidates: list[ScoredCandidate], filters: dict | None = None) -> list[ScoredCandidate]:
-    """Fast pre-rank filtering to reduce candidate pool before scoring."""
+    """Fast pre-rank filtering to reduce candidate pool."""
     if not filters:
         return candidates
 
@@ -109,13 +146,13 @@ def pre_rank_filter(candidates: list[ScoredCandidate], filters: dict | None = No
 
 
 def post_rank_filter(candidates: list[ScoredCandidate]) -> list[ScoredCandidate]:
-    """Post-rank quality filters: deduplication, minimum score threshold."""
+    """Post-rank: dedup and quality threshold."""
     seen_ids = set()
     filtered = []
     for c in candidates:
         if c.product.id in seen_ids:
             continue
-        if c.final_score < 0.01:  # Minimum quality threshold
+        if c.final_score < 0.01:
             continue
         seen_ids.add(c.product.id)
         filtered.append(c)
@@ -124,7 +161,6 @@ def post_rank_filter(candidates: list[ScoredCandidate]) -> list[ScoredCandidate]
 
 # ──────────────────────────────────────────────────────────
 # Stage 3: Full Ranking Pipeline
-# Composes all stages: filter -> score -> rerank -> select
 # ──────────────────────────────────────────────────────────
 
 def rank_candidates(
@@ -135,39 +171,36 @@ def rank_candidates(
     top_k: int = 5,
 ) -> list[Product]:
     """
-    Full ranking pipeline inspired by Twitter's product-mixer architecture.
+    Full ranking pipeline inspired by Twitter's product-mixer.
 
     Stages:
     1. Create scored candidates
     2. Pre-rank filtering (fast attribute checks)
-    3. Base scoring (vector similarity)
-    4. Heuristic rescoring (multiplicative adjustments)
-    5. Post-rank filtering (dedup, quality gates)
-    6. Diversity-aware selection
+    3. Multi-signal scoring with 7 heuristic rescorers
+    4. Post-rank filtering (dedup, quality gates)
+    5. Diversity-aware selection
     """
-    # Stage 1: Create candidates with base scores
     candidates = [
         ScoredCandidate(product=p, similarity_score=s)
         for p, s in zip(products, similarity_scores)
     ]
 
-    # Stage 2: Pre-rank filtering
     candidates = pre_rank_filter(candidates, filters)
-
     if not candidates:
         return []
 
-    # Stage 3-4: Scoring with heuristic rescoring
+    # Scoring with all rescorers
     seen_categories: dict[str, int] = {}
 
     for c in candidates:
-        # Start with base similarity score
         score = c.similarity_score
 
-        # Apply multiplicative rescorers (Twitter pattern)
         c.freshness_score = freshness_rescorer(c)
         c.popularity_score = popularity_rescorer(c)
         c.price_relevance = price_relevance_rescorer(c, target_price)
+        c.stock_penalty = stock_rescorer(c)
+        c.discount_boost = discount_rescorer(c)
+        c.review_confidence = review_confidence_rescorer(c)
         c.diversity_bonus = diversity_rescorer(c, seen_categories)
 
         c.final_score = (
@@ -175,37 +208,30 @@ def rank_candidates(
             * c.freshness_score
             * c.popularity_score
             * c.price_relevance
+            * c.stock_penalty
+            * c.discount_boost
+            * c.review_confidence
             * c.diversity_bonus
         )
 
-        # Track category counts for diversity
         seen_categories[c.product.category] = seen_categories.get(c.product.category, 0) + 1
 
-    # Sort by final score
     candidates.sort(key=lambda c: c.final_score, reverse=True)
-
-    # Stage 5: Post-rank filtering
     candidates = post_rank_filter(candidates)
-
-    # Stage 6: Diversity-aware selection (interleaving pattern from Twitter's SwitchBlender)
     selected = _diversity_select(candidates, top_k)
 
     return [c.product for c in selected]
 
 
 def _diversity_select(candidates: list[ScoredCandidate], top_k: int) -> list[ScoredCandidate]:
-    """
-    Select top_k candidates with category diversity.
-    Inspired by Twitter's round-robin blending strategy.
-    Ensures no single category dominates the results.
-    """
+    """Select top_k with category diversity (round-robin inspired)."""
     if len(candidates) <= top_k:
         return candidates
 
     selected = []
     remaining = list(candidates)
     category_counts: dict[str, int] = {}
-    max_per_category = max(2, top_k // 3)  # At most ~1/3 from one category
+    max_per_category = max(2, top_k // 3)
 
     for candidate in remaining:
         cat = candidate.product.category
@@ -216,7 +242,6 @@ def _diversity_select(candidates: list[ScoredCandidate], top_k: int) -> list[Sco
         if len(selected) >= top_k:
             break
 
-    # If diversity constraint was too strict, fill with best remaining
     if len(selected) < top_k:
         selected_ids = {c.product.id for c in selected}
         for candidate in remaining:

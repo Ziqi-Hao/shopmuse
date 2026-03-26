@@ -16,6 +16,12 @@ class Product(BaseModel):
     rating: float
     brand: str
     image_url: str
+    # New fields for richer catalog
+    material: Optional[str] = None
+    sizes: Optional[list[str]] = None
+    in_stock: bool = True
+    review_count: int = 0
+    discount_pct: int = 0  # 0-50, percentage off
 
 
 class ChatMessage(BaseModel):

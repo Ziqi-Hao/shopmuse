@@ -14,6 +14,11 @@ export interface Product {
   rating: number;
   brand: string;
   image_url: string;
+  material?: string;
+  sizes?: string[];
+  in_stock?: boolean;
+  review_count?: number;
+  discount_pct?: number;
 }
 
 export interface ChatMessage {
