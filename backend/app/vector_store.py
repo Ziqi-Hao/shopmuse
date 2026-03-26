@@ -77,7 +77,7 @@ def _embed_texts(texts: list[str]) -> np.ndarray:
 
     client = _get_client()
     all_embeddings = []
-    batch_size = 50
+    batch_size = 200  # Maximize batch size to reduce API round-trips
     for i in range(0, len(texts), batch_size):
         batch = texts[i : i + batch_size]
         response = client.embeddings.create(
