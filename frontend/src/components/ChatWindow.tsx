@@ -14,9 +14,10 @@ const WELCOME_MESSAGE: ChatMessageType = {
     "Hi there! I'm **ShopMuse**, your AI shopping assistant.\n\n" +
     "I can help you in three ways:\n\n" +
     "1. **Describe** what you're looking for and I'll find the best matches\n" +
-    "2. **Upload a photo** and I'll search for similar items\n" +
+    "2. **Upload a photo** of clothing or accessories and I'll find similar items\n" +
     "3. **Ask** me anything about style, sizing, or outfit ideas\n\n" +
-    "What are you shopping for today?",
+    "Our catalog covers: **T-shirts, Shoes, Pants, Jackets, Bags, and Accessories** (sunglasses, watches, hats, belts, and more).\n\n" +
+    "What are you looking for today?",
 };
 
 export interface ChatWindowHandle {
