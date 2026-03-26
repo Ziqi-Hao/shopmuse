@@ -23,8 +23,11 @@ load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: build indexes
-    vector_store.initialize()
+    # Build index in background so the server binds the port immediately.
+    # Render's port scanner times out after 5 minutes — embedding 500 products
+    # takes longer than that if done synchronously before port binding.
+    import threading
+    threading.Thread(target=vector_store.initialize, daemon=True).start()
     yield
 
 
@@ -67,9 +70,15 @@ def get_agent() -> ShopMuseAgent:
 
 @app.get("/health")
 async def health():
+    try:
+        count = vector_store.get_text_index()[0].ntotal
+        status = "ok"
+    except Exception:
+        count = 0
+        status = "initializing"
     return {
-        "status": "ok",
-        "products_indexed": vector_store.get_text_index()[0].ntotal,
+        "status": status,
+        "products_indexed": count,
         "embedding_cache": get_cache_stats(),
     }
 
