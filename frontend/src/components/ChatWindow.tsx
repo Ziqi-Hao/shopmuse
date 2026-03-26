@@ -5,6 +5,8 @@ import type { ChatMessage as ChatMessageType } from "@/lib/api";
 import { sendChatMessage } from "@/lib/api";
 import ChatMessage from "./ChatMessage";
 import ChatInput from "./ChatInput";
+import { LogoMark } from "./Logo";
+import Logo from "./Logo";
 
 const WELCOME_MESSAGE: ChatMessageType = {
   role: "assistant",
@@ -35,30 +37,22 @@ const ChatWindow = forwardRef<ChatWindowHandle>(function ChatWindow(_, ref) {
   }, [messages]);
 
   const handleSend = async (message: string, imageBase64?: string) => {
-    const userMessage: ChatMessageType = {
-      role: "user",
-      content: message,
-      image_base64: imageBase64,
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages((prev) => [
+      ...prev,
+      { role: "user", content: message, image_base64: imageBase64 },
+    ]);
     setLoading(true);
 
     try {
       const response = await sendChatMessage(message, messages, imageBase64);
-      const assistantMessage: ChatMessageType = {
-        role: "assistant",
-        content: response.message,
-        products: response.products || undefined,
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (error) {
       setMessages((prev) => [
         ...prev,
-        {
-          role: "assistant",
-          content: "Sorry, I encountered an error. Please make sure the backend server is running.",
-        },
+        { role: "assistant", content: response.message, products: response.products || undefined },
+      ]);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Sorry, I couldn't process that. Please make sure the backend is running." },
       ]);
     } finally {
       setLoading(false);
@@ -70,42 +64,43 @@ const ChatWindow = forwardRef<ChatWindowHandle>(function ChatWindow(_, ref) {
   }));
 
   return (
-    <div className="flex flex-col h-full bg-[#f0f2f5]">
+    <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="bg-white border-b border-gray-100 px-6 py-3.5 flex items-center gap-3 shadow-sm">
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-md shadow-indigo-200">
-          S
-        </div>
-        <div className="flex-1">
-          <h1 className="text-[15px] font-semibold text-gray-900">ShopMuse</h1>
-          <div className="flex items-center gap-1.5">
-            <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-            <p className="text-[11px] text-gray-400">Online</p>
+      <header className="bg-white/80 backdrop-blur-md border-b border-slate-200/60 px-5 py-3 flex items-center justify-between sticky top-0 z-10">
+        <div className="flex items-center gap-3">
+          <Logo size={28} />
+          <div>
+            <h1 className="text-sm font-semibold text-slate-800">ShopMuse</h1>
+            <div className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-[10px] text-slate-400">Ready</span>
+            </div>
           </div>
         </div>
-        {/* Mobile: show on small screens */}
-        <span className="lg:hidden text-[11px] text-gray-400 bg-gray-50 px-2.5 py-1 rounded-full">
-          100 products
-        </span>
-      </div>
+        <div className="lg:hidden">
+          <span className="text-[10px] text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full font-medium">
+            500 products
+          </span>
+        </div>
+      </header>
 
-      {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 md:px-8 lg:px-12">
-        <div className="max-w-3xl mx-auto">
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto px-4 py-6 md:px-6 lg:px-10">
+        <div className="max-w-3xl mx-auto space-y-1">
           {messages.map((msg, idx) => (
             <ChatMessage key={idx} message={msg} />
           ))}
 
           {loading && (
-            <div className="flex items-start gap-3 mb-4">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs shrink-0 mt-0.5">
-                S
+            <div className="flex items-start gap-3 py-3">
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center shrink-0">
+                <Logo size={16} />
               </div>
-              <div className="bg-white border border-gray-100 rounded-2xl rounded-tl-md px-4 py-3 shadow-sm">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 bg-indigo-400 rounded-full animate-pulse-soft" />
-                  <div className="w-2 h-2 bg-indigo-400 rounded-full animate-pulse-soft" style={{ animationDelay: "200ms" }} />
-                  <div className="w-2 h-2 bg-indigo-400 rounded-full animate-pulse-soft" style={{ animationDelay: "400ms" }} />
+              <div className="bg-white border border-slate-200/60 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
+                <div className="flex items-center gap-1">
+                  <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full typing-dot" />
+                  <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full typing-dot" />
+                  <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full typing-dot" />
                 </div>
               </div>
             </div>
