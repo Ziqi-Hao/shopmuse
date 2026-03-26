@@ -15,6 +15,7 @@ from app.agent import ShopMuseAgent
 from app.catalog import get_catalog
 from app.models.schemas import ChatRequest, ChatResponse, Product
 from app import vector_store
+from app.vector_store import get_cache_stats
 from app.memory import get_all_memories, get_session
 
 load_dotenv()
@@ -66,7 +67,11 @@ def get_agent() -> ShopMuseAgent:
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "products_indexed": vector_store.get_text_index()[0].ntotal}
+    return {
+        "status": "ok",
+        "products_indexed": vector_store.get_text_index()[0].ntotal,
+        "embedding_cache": get_cache_stats(),
+    }
 
 
 @app.get("/products", response_model=list[Product])
