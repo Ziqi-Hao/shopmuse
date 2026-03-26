@@ -2,6 +2,7 @@
 
 import type { ChatMessage as ChatMessageType } from "@/lib/api";
 import ProductCard from "./ProductCard";
+import ReactMarkdown from "react-markdown";
 
 export default function ChatMessage({ message }: { message: ChatMessageType }) {
   const isUser = message.role === "user";
@@ -26,9 +27,9 @@ export default function ChatMessage({ message }: { message: ChatMessageType }) {
           </div>
         )}
 
-        {/* Message text */}
-        <div className="text-sm leading-relaxed whitespace-pre-wrap">
-          {message.content}
+        {/* Message text with Markdown rendering */}
+        <div className="text-sm leading-relaxed prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2 prose-strong:font-semibold">
+          <ReactMarkdown>{message.content}</ReactMarkdown>
         </div>
 
         {/* Product cards */}
